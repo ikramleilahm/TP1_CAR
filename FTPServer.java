@@ -1,70 +1,107 @@
 package TP1_CAR;
-
-import java.io.PrintWriter;
-import java.net.ServerSocket;
-import java.net.Socket;
+import java.io.*;
+import java.net.*;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Scanner;
 
 public class FTPServer {
 
+    private static final Map<String, String> users = new HashMap<>();
+
+    static {
+        users.put("admin", "1234"); 
+    }
+
     public static void main(String[] args) {
-        int port = 21; // Port FTP standard
-        String username = "test"; // Nom d'utilisateur prédéfini
-        String password = "1234"; // Mot de passe prédéfini
+        int port = 21; 
 
         try (ServerSocket serverSocket = new ServerSocket(port)) {
-            System.out.println("Serveur FTP en attente de connexions sur le port " + port);
-
+            System.out.println("Serveur FTP démarré sur le port : " + port);
             while (true) {
-                // Accepter une connexion client
                 Socket clientSocket = serverSocket.accept();
+                // Client accepté, afficher son adresse
                 System.out.println("Client connecté : " + clientSocket.getInetAddress());
+                new Thread(() -> handleClient(clientSocket)).start();
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
 
-                try (Scanner in = new Scanner(clientSocket.getInputStream());
-                     PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true)) {
+    private static void handleClient(Socket clientSocket) {
+        try (
+            InputStream input = clientSocket.getInputStream();
+            OutputStream output = clientSocket.getOutputStream();
+            Scanner scanner = new Scanner(input)
+        ) {
+            // Message de bienvenue
+            output.write("220 Bienvenue sur le serveur FTP\r\n".getBytes());
 
-                    // Envoyer le message de bienvenue
-                    out.println("220 Bienvenue sur le serveur FTP");
+            // Authentification de l'utilisateur
+            if (authenticateUser(scanner, output)) {
+                boolean running = true;
+                while (running) {
+                    String command = scanner.hasNextLine() ? scanner.nextLine() : "";
 
-                    while (true) {
-                        // Lire la commande du client
-                        String command = in.nextLine();
-                        System.out.println("Commande reçue : " + command);
+                    // **Afficher la commande reçue dans la console**
+                    System.out.println("Commande reçue : " + command);
 
-                        // commandes FTP
-                        if (command.equals("USER " + username)) { // Vérifier le username
-                            out.println("331 Username OK, need password.");
-                        } else if (command.equals("PASS " + password)) { // Vérifier le password
-                            out.println("230 User logged in successfully.");
-                        } else if (command.equals("QUIT")) { // Déconnexion
-                            out.println("221 Goodbye.");
-                            break; // Quitter la boucle
-                        } else if (command.startsWith("USER") || command.startsWith("PASS")) { 
-                            // Gérer un username ou un password incorrect
-                            if (command.startsWith("USER")) {
-                                out.println("530 Invalid username."); // Message d'erreur pour mauvais username
-                            } else {
-                                out.println("530 Invalid password."); // Message d'erreur pour mauvais password
-                            }
-                        } else {
-                            // Toute autre commande non reconnue ou sans authentification
-                            out.println("530 Invalid command or please login first.");
-                        }
+                    if (command.equalsIgnoreCase("QUIT")) {
+                        output.write("221 Deconnexion en cours. Au revoir!\r\n".getBytes());
+                        running = false; // Quitter la boucle et fermer la connexion
                     }
-
-                } catch (Exception e) {
-                    System.err.println("Erreur dans la gestion du client : " + e.getMessage());
-                } finally {
-                    try {
-                        clientSocket.close();
-                    } catch (Exception e) {
-                        System.err.println("Erreur lors de la fermeture du socket client : " + e.getMessage());
+                     else {
+                        // Commande non supportée
+                        sendResponse(output, "502 Commande non supportee : " + command + "\r\n");
                     }
-                    System.out.println("Client déconnecté.");
                 }
             }
-        } catch (Exception e) {
-            System.err.println("Erreur au niveau du serveur : " + e.getMessage());
+        } catch (IOException e) {
+            e.printStackTrace();
+        } finally {
+            try {
+                clientSocket.close();
+                System.out.println("Client déconnecté");
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
+    }
+
+    // Authentification
+    private static boolean authenticateUser(Scanner scanner, OutputStream output) throws IOException {
+        String username = null;
+        while (true) {
+            String input = receiveMessage(scanner);
+
+            if (input.toUpperCase().startsWith("USER")) {
+                username = input.substring(5).trim(); // Extraire le nom d'utilisateur après "USER "
+                sendResponse(output, "331 Nom d'utilisateur accepte. Veuillez entrer le mot de passe.\r\n");
+            } else if (input.toUpperCase().startsWith("PASS")) {
+                if (username == null) {
+                    sendResponse(output, "503 Mauvaise sequence de commande. Veuillez d'abord envoyer USER.\r\n");
+                } else {
+                    String password = input.substring(5).trim(); // Extraire le mot de passe après "PASS "
+                    if (users.containsKey(username) && users.get(username).equals(password)) {
+                        sendResponse(output, "230 Authentification reussie. Bienvenue !\r\n");
+                        return true;
+                    } else {
+                        sendResponse(output, "530 Nom d'utilisateur ou mot de passe incorrect. Veuillez reessayer.\r\n");
+                    }
+                }
+            } else {
+                sendResponse(output, "530 Vous devez vous authentifier avec USER et PASS.\r\n");
+            }
+        }
+    }
+
+    private static String receiveMessage(Scanner scanner) {
+        return scanner.hasNextLine() ? scanner.nextLine() : "";
+    }
+
+    // Méthode d'envoi de réponse
+    private static void sendResponse(OutputStream output, String message) throws IOException {
+        output.write(message.getBytes());
     }
 }
