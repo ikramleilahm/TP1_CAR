@@ -58,6 +58,9 @@ public class FTPServer {
                     } else if (command.startsWith("EPRT")) {
                         // Gestion de la commande EPRT en mode actif
                         handleEPRT(command, output);
+                    } else if (command.startsWith("RETR")) {
+                        // Gestion de la commande RETR (obtenir un fichier)
+                        handleRETR(command, output);
                     } 
                      else {
                         // Commande non supportée
@@ -188,6 +191,55 @@ public class FTPServer {
     private static boolean isValidIp(String ip) {
         return ip.matches("^(\\d+\\.\\d+\\.\\d+\\.\\d+)$") || ip.matches("^([0-9a-fA-F:]+)$");
     }
+
+    // Gérer la commande RETR
+    private static void handleRETR(String command, OutputStream output) {
+        // Récupérer le fichier demandé
+        String fileName = command.substring(5).trim(); // Supposer que le nom du fichier suit "RETR "
+        File file = new File(fileName);
+
+        if (!file.exists()) {
+            try {
+                sendResponse(output, "550 Fichier non trouvé.\r\n");
+                return;
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        // Répondre pour indiquer que le serveur va commencer à envoyer le fichier
+        try {
+            sendResponse(output, "150 Ouverture de la connexion de données pour " + fileName + "\r\n");
+
+            // Créer un flux de données sur la connexion de données
+            try (OutputStream dataOutput = dataSocket.getOutputStream();
+                 FileInputStream fileInput = new FileInputStream(file)) {
+
+                byte[] buffer = new byte[1024];
+                int bytesRead;
+                while ((bytesRead = fileInput.read(buffer)) != -1) {
+                    dataOutput.write(buffer, 0, bytesRead);
+                }
+
+                // Envoi terminé, on ferme la connexion de données
+                sendResponse(output, "226 Transfert terminé.\r\n");
+            } catch (IOException e) {
+                sendResponse(output, "425 Impossible d'ouvrir la connexion de données.\r\n");
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        } finally {
+            // Fermer la connexion de données à la fin du transfert
+            try {
+                if (dataSocket != null) {
+                    dataSocket.close();
+                    System.out.println("Connexion de données fermée.");
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
         
 
 }
