@@ -1,8 +1,4 @@
 # TP1_CAR
-Voici une version réécrite et adaptée pour être incluse dans un fichier README :
-
----
-
 ## Étendre le Serveur FTP : Ajout de Nouvelles Commandes
 
 Ce guide vous explique comment enrichir mon serveur FTP en implémentant des commandes supplémentaires non encore prises en charge.
