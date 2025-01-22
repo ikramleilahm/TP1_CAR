@@ -61,7 +61,10 @@ public class FTPServer {
                     } else if (command.startsWith("RETR")) {
                         // Gestion de la commande RETR (obtenir un fichier)
                         handleRETR(command, output);
-                    } 
+                    } else if (command.startsWith("LIST")) {
+                        // Gestion de la commande LIST (lister les fichiers)
+                        handleLIST(command, output);
+                    }
                      else {
                         // Commande non supportée
                         sendResponse(output, "502 Commande non supportee : " + command + "\r\n");
@@ -239,6 +242,53 @@ public class FTPServer {
             }
         }
     }
+
+    // Gerer la commande LIST
+    private static void handleLIST(String command, OutputStream output) {
+        try {
+            File currentDirectory = new File("."); // Répertoire courant du serveur
+            File[] files = currentDirectory.listFiles();
+    
+            if (files == null || files.length == 0) {
+                sendResponse(output, "150 Aucun fichier ou répertoire dans le répertoire courant.\r\n");
+                sendResponse(output, "226 Liste terminée.\r\n");
+                return;
+            }
+    
+            // Envoyer une réponse initiale pour indiquer que le transfert va commencer
+            sendResponse(output, "150 Ouverture de la connexion de données pour la liste des fichiers.\r\n");
+    
+            // Ouvrir un flux de sortie pour envoyer la liste via la connexion de données
+            try (OutputStream dataOutput = dataSocket.getOutputStream()) {
+                for (File file : files) {
+                    String fileInfo = (file.isDirectory() ? "Dossier " : "Fichier ") + file.getName() + "\r\n";
+                    dataOutput.write(fileInfo.getBytes());
+                }
+            } catch (IOException e) {
+                sendResponse(output, "425 Impossible d'ouvrir la connexion de données.\r\n");
+                return;
+            }
+    
+            // Indiquer que la liste est terminée
+            sendResponse(output, "226 Liste terminée.\r\n");
+        } catch (IOException e) {
+            try {
+                sendResponse(output, "451 Erreur pendant l'envoi de la liste.\r\n");
+            } catch (IOException ioException) {
+                ioException.printStackTrace();
+            }
+        } finally {
+            // Fermer la connexion de données à la fin du transfert
+            try {
+                if (dataSocket != null) {
+                    dataSocket.close();
+                    System.out.println("Connexion de données fermée après LIST.");
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }    
 
         
 
