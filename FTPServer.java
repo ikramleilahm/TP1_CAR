@@ -64,6 +64,8 @@ public class FTPServer {
                     } else if (command.startsWith("LIST")) {
                         // Gestion de la commande LIST (lister les fichiers)
                         handleLIST(command, output);
+                    } else if (command.startsWith("CWD")) {
+                        handleCWD(command, output);
                     }
                      else {
                         // Commande non supportée
@@ -246,7 +248,8 @@ public class FTPServer {
     // Gerer la commande LIST
     private static void handleLIST(String command, OutputStream output) {
         try {
-            File currentDirectory = new File("."); // Répertoire courant du serveur
+            // Utiliser le répertoire courant mis à jour
+            File currentDirectory = new File(System.getProperty("user.dir"));
             File[] files = currentDirectory.listFiles();
     
             if (files == null || files.length == 0) {
@@ -288,9 +291,37 @@ public class FTPServer {
                 e.printStackTrace();
             }
         }
-    }    
-
-        
+    }  
+    
+    // Gerer la commande CWD
+    private static void handleCWD(String command, OutputStream output) {
+        try {
+            // Extraire le chemin demandé après "CWD "
+            String[] parts = command.split(" ", 2);
+            if (parts.length < 2) {
+                sendResponse(output, "501 Chemin non spécifie.\r\n"); // Erreur si aucun chemin n'est fourni
+                return;
+            }
+    
+            String requestedPath = parts[1].trim();
+            File newDir = new File(requestedPath);
+    
+            if (newDir.isDirectory() && newDir.exists()) {
+                // Changer le répertoire courant
+                System.setProperty("user.dir", newDir.getAbsolutePath());
+                sendResponse(output, "250 Repertoire change avec succes a : " + newDir.getAbsolutePath() + "\r\n");
+            } else {
+                sendResponse(output, "550 Repertoire introuvable ou inaccessible : " + requestedPath + "\r\n");
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+            try {
+                sendResponse(output, "451 Erreur lors du changement de répertoire.\r\n");
+            } catch (IOException ex) {
+                ex.printStackTrace();
+            }
+        }
+    }        
 
 }
 
